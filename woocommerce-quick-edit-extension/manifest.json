@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "WooCommerce Quick Image & Price Edit",
+  "version": "1.0",
+  "description": "Edita rápidamente el precio normal y la imagen de los productos en WooCommerce usando Serper.dev",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "background"
+  ],
+  "host_permissions": [
+    "https://google.serper.dev/*",
+    "*://*/*wp-admin/*"
+  ],
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*/wp-admin/edit.php?post_type=product*"],
+      "css": ["styles.css"],
+      "js": ["content.js"],
+      "run_at": "document_end"
+    }
+  ]
+}

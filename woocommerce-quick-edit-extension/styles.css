@@ -12,6 +12,17 @@
     clear: both;
 }
 
+.wc-qe-title {
+    font-weight: 600;
+    color: #1d2327;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 2px;
+    font-size: 10px;
+    text-transform: uppercase;
+}
+
 .wc-qe-row {
     display: flex;
     align-items: center;
@@ -53,8 +64,8 @@
 
 .wc-qe-grid-container {
     display: none;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 5px;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
     margin-top: 5px;
 }
 
@@ -94,8 +105,19 @@
     color: #666;
 }
 
-/* Make sure the thumb column is wide enough */
+/* Make sure the thumb column is wide enough to fit our UI */
 .wp-list-table th.column-thumb,
 .wp-list-table td.column-thumb {
-    width: 120px !important;
+    width: 150px !important;
+}
+
+/* Enlarge the main WooCommerce product thumbnail */
+.wp-list-table td.column-thumb img {
+    width: 100px !important;
+    height: 100px !important;
+    object-fit: contain;
+    border-radius: 4px;
+    border: 1px solid #ddd;
+    background: #fff;
+    margin-bottom: 5px;
 }

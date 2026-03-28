@@ -25,11 +25,13 @@ function injectUI() {
         const titleInput = row.querySelector('.post_title') || row.querySelector('strong a.row-title');
         const productTitle = titleInput ? (titleInput.value || titleInput.textContent).trim() : 'Producto';
 
-        // Extract Current Regular Price from the hidden inline-edit data (WooCommerce specific)
-        const inlineData = row.querySelector('.inline-edit-wrapper');
+        // Extract Current Regular Price from the hidden inline-edit data
+        // WooCommerce injects a hidden row with id="inline_{post_id}" directly after the main row
+        // or sometimes inside the main row under '.inline-edit-wrapper'
         let currentRegularPrice = '';
-        if (inlineData) {
-            const priceInput = inlineData.querySelector('input[name="_regular_price"]');
+        const inlineEditRow = document.getElementById(`inline_${productId}`);
+        if (inlineEditRow) {
+            const priceInput = inlineEditRow.querySelector('input[name="_regular_price"]');
             if (priceInput) {
                 currentRegularPrice = priceInput.value;
             }
@@ -39,10 +41,16 @@ function injectUI() {
         if (!currentRegularPrice) {
             const priceColumn = row.querySelector('td.column-price');
             if (priceColumn) {
-                 const amountEl = priceColumn.querySelector('ins .woocommerce-Price-amount bdi') || priceColumn.querySelector('.woocommerce-Price-amount bdi');
+                 // Try to find the regular price specifically (it might be struck out if on sale, or just a normal bdi)
+                 // A simple way is to find the FIRST bdi element or the one inside <del> if on sale
+                 let amountEl = priceColumn.querySelector('del .woocommerce-Price-amount bdi');
+                 if (!amountEl) {
+                     amountEl = priceColumn.querySelector('.woocommerce-Price-amount bdi');
+                 }
                  if (amountEl) {
                      // Get just the text, strip currency symbols (very basic fallback)
-                     currentRegularPrice = amountEl.textContent.replace(/[^\d.,]/g, '');
+                     // Reemplazamos cualquier cosa que no sea número o punto (asumiendo formato estándar)
+                     currentRegularPrice = amountEl.textContent.replace(/[^\d.]/g, '');
                  }
             }
         }
@@ -52,6 +60,13 @@ function injectUI() {
         container.className = 'wc-qe-container';
         container.setAttribute('data-product-id', productId);
         container.setAttribute('data-product-title', productTitle);
+
+        // Product Title Row
+        const titleRow = document.createElement('div');
+        titleRow.className = 'wc-qe-title';
+        // Sometimes titles are long, so we truncate it visually via CSS
+        titleRow.textContent = productTitle;
+        titleRow.title = productTitle;
 
         // Price Row
         const priceRow = document.createElement('div');
@@ -81,6 +96,7 @@ function injectUI() {
         gridContainer.className = 'wc-qe-grid-container';
 
         // Append everything
+        container.appendChild(titleRow);
         container.appendChild(priceRow);
         container.appendChild(imageRow);
         container.appendChild(loadingDiv);

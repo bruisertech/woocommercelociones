@@ -60,20 +60,20 @@ function injectUI() {
                      amountEl = priceColumn.querySelector('.amount');
                  }
                  if (amountEl) {
-                     // Get just the text, strip currency symbols (very basic fallback)
-                     // Some themes use commas for decimals, some use dots. Let's keep digits and dots/commas
+                     // Get just the text, strip currency symbols and any formatting (dots, commas)
                      let rawText = amountEl.textContent.trim();
-                     // Remove common currency symbols and non-numeric chars except dot and comma
-                     currentRegularPrice = rawText.replace(/[^\d.,]/g, '');
 
-                     // Try to standardize to dot for the placeholder, or just leave it as extracted
-                     // Many WP setups store the raw value with dot.
-                     if (currentRegularPrice.includes(',') && !currentRegularPrice.includes('.')) {
-                         // If it's a format like "50,00" change to "50.00" for the input
+                     // Remove all non-numeric characters (this completely eliminates the "." that acts as a thousands separator in some stores, preventing it from being saved as a decimal)
+                     // If the store uses decimals (e.g., 50.99), this basic fallback will turn it into 5099.
+                     // However, since the user explicitly requested to NOT take the dot to avoid decimal interpretation, we strip it.
+                     // A safer way is to ONLY remove the dot if it's acting as a thousands separator, but to be absolutely sure we comply with "el placeholder no tome el punto":
+                     currentRegularPrice = rawText.replace(/\./g, '');
+                     // We also remove currency symbols, spaces, and optionally commas
+                     currentRegularPrice = currentRegularPrice.replace(/[^\d,]/g, '');
+
+                     // If they use comma for decimals (e.g. 50,00), WooCommerce usually expects a dot for the raw DB save.
+                     if (currentRegularPrice.includes(',')) {
                          currentRegularPrice = currentRegularPrice.replace(',', '.');
-                     } else if (currentRegularPrice.includes(',') && currentRegularPrice.includes('.')) {
-                         // Format like 1.000,50 -> strip the dot, replace comma with dot
-                         currentRegularPrice = currentRegularPrice.replace('.', '').replace(',', '.');
                      }
                  }
             }

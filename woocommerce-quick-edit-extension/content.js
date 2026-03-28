@@ -107,6 +107,14 @@ function injectUI() {
             <button type="button" class="button wc-qe-btn wc-qe-btn-secondary wc-qe-search-img" style="width: 100%;">🔍 Cambiar Img</button>
         `;
 
+        // Search Input Row (hidden by default)
+        const searchInputRow = document.createElement('div');
+        searchInputRow.className = 'wc-qe-row';
+        searchInputRow.style.display = 'none';
+        searchInputRow.innerHTML = `
+            <input type="text" class="wc-qe-input wc-qe-search-input" value="${productTitle} parfum white bg" style="width: 100% !important; margin-top: 5px; margin-bottom: 2px;" title="Presiona Enter para buscar otra vez" />
+        `;
+
         // Loading and Status indicators
         const loadingDiv = document.createElement('div');
         loadingDiv.className = 'wc-qe-loading';
@@ -123,6 +131,7 @@ function injectUI() {
         container.appendChild(titleRow);
         container.appendChild(priceRow);
         container.appendChild(imageRow);
+        container.appendChild(searchInputRow);
         container.appendChild(loadingDiv);
         container.appendChild(gridContainer);
         container.appendChild(statusDiv);
@@ -139,6 +148,8 @@ function attachEventListeners(container, productId, productTitle) {
     const btnSavePrice = container.querySelector('.wc-qe-save-price');
     const inputPrice = container.querySelector('.wc-qe-price-input');
     const btnSearchImg = container.querySelector('.wc-qe-search-img');
+    const searchInput = container.querySelector('.wc-qe-search-input');
+    const searchInputRow = searchInput.closest('.wc-qe-row');
     const statusDiv = container.querySelector('.wc-qe-status');
     const loadingDiv = container.querySelector('.wc-qe-loading');
     const gridContainer = container.querySelector('.wc-qe-grid-container');
@@ -150,17 +161,33 @@ function attachEventListeners(container, productId, productTitle) {
         savePrice(productId, newPrice, statusDiv, btnSavePrice);
     });
 
-    // Handle Image Search
+    // Handle Image Search toggle
     btnSearchImg.addEventListener('click', (e) => {
         e.preventDefault();
 
         // Toggle if already visible
-        if (gridContainer.style.display === 'grid') {
+        if (searchInputRow.style.display === 'flex') {
+            searchInputRow.style.display = 'none';
             gridContainer.style.display = 'none';
             return;
         }
 
-        searchImages(productTitle, gridContainer, loadingDiv, statusDiv, productId);
+        // Show the search input row
+        searchInputRow.style.display = 'flex';
+
+        // Do the initial search with what's in the box
+        searchImages(searchInput.value.trim(), gridContainer, loadingDiv, statusDiv, productId);
+    });
+
+    // Handle Enter key in Search Input to trigger a new search
+    searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const customQuery = searchInput.value.trim();
+            if (customQuery !== '') {
+                 searchImages(customQuery, gridContainer, loadingDiv, statusDiv, productId);
+            }
+        }
     });
 }
 
@@ -300,17 +327,14 @@ function savePrice(productId, newPrice, statusDiv, btnElement) {
     saveViaQuickEdit(productId, '_regular_price', newPrice, statusDiv, btnElement, false);
 }
 
-function searchImages(productTitle, gridContainer, loadingDiv, statusDiv, productId) {
-    console.log(`Searching images for ${productTitle}`);
+function searchImages(query, gridContainer, loadingDiv, statusDiv, productId) {
+    console.log(`Searching images for: ${query}`);
 
     // Clear previous results
     gridContainer.innerHTML = '';
     gridContainer.style.display = 'none';
 
     loadingDiv.style.display = 'block';
-
-    // Construct the query specific to the user's request
-    const query = `${productTitle} parfum white bg`;
 
     // Send message to background script to bypass CORS
     chrome.runtime.sendMessage({ action: "searchImages", query: query }, (response) => {

@@ -21,9 +21,17 @@ function injectUI() {
         if (!rowId) return;
         const productId = rowId.replace('post-', '');
 
+        // Helper to decode HTML entities like &amp;
+        const decodeEntities = (html) => {
+            const txt = document.createElement("textarea");
+            txt.innerHTML = html;
+            return txt.value;
+        };
+
         // Extract Product Title from the hidden inline-edit data
         const titleInput = row.querySelector('.post_title') || row.querySelector('strong a.row-title');
-        const productTitle = titleInput ? (titleInput.value || titleInput.textContent).trim() : 'Producto';
+        let productTitle = titleInput ? (titleInput.value || titleInput.textContent).trim() : 'Producto';
+        productTitle = decodeEntities(productTitle);
 
         // Extract Current Regular Price from the hidden inline-edit data
         // WooCommerce injects a hidden row with id="inline_{post_id}" directly after the main row
@@ -47,10 +55,26 @@ function injectUI() {
                  if (!amountEl) {
                      amountEl = priceColumn.querySelector('.woocommerce-Price-amount bdi');
                  }
+                 if (!amountEl) {
+                     // General fallback for other WooCommerce structures
+                     amountEl = priceColumn.querySelector('.amount');
+                 }
                  if (amountEl) {
                      // Get just the text, strip currency symbols (very basic fallback)
-                     // Reemplazamos cualquier cosa que no sea número o punto (asumiendo formato estándar)
-                     currentRegularPrice = amountEl.textContent.replace(/[^\d.]/g, '');
+                     // Some themes use commas for decimals, some use dots. Let's keep digits and dots/commas
+                     let rawText = amountEl.textContent.trim();
+                     // Remove common currency symbols and non-numeric chars except dot and comma
+                     currentRegularPrice = rawText.replace(/[^\d.,]/g, '');
+
+                     // Try to standardize to dot for the placeholder, or just leave it as extracted
+                     // Many WP setups store the raw value with dot.
+                     if (currentRegularPrice.includes(',') && !currentRegularPrice.includes('.')) {
+                         // If it's a format like "50,00" change to "50.00" for the input
+                         currentRegularPrice = currentRegularPrice.replace(',', '.');
+                     } else if (currentRegularPrice.includes(',') && currentRegularPrice.includes('.')) {
+                         // Format like 1.000,50 -> strip the dot, replace comma with dot
+                         currentRegularPrice = currentRegularPrice.replace('.', '').replace(',', '.');
+                     }
                  }
             }
         }

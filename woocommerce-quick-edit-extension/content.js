@@ -179,126 +179,125 @@ function getWpNonce(actionName) {
     return nonceInput ? nonceInput.value : '';
 }
 
-// Function to collect inline edit data from the hidden fields WP generates
-function collectInlineEditData(productId) {
-    const row = document.getElementById(`inline_${productId}`);
-    if (!row) return null;
+// Function to safely trigger the native Quick Edit and inject our data
+function saveViaQuickEdit(productId, fieldName, value, statusDiv, btnElement = null, isImage = false, attachmentUrl = null) {
+    if (btnElement) {
+        btnElement.disabled = true;
+        btnElement.textContent = '...';
+    }
 
-    const data = {};
-    const inputs = row.querySelectorAll('input, select, textarea');
-    inputs.forEach(input => {
-        if (input.name) {
-            // Checkboxes
-            if (input.type === 'checkbox') {
-                if (input.checked) data[input.name] = input.value;
-            } else if (input.type === 'radio') {
-                if (input.checked) data[input.name] = input.value;
-            } else {
-                data[input.name] = input.value;
-            }
-        }
-    });
-    return data;
-}
-
-// Function to save the Regular Price via WP Admin AJAX using the native inline-save action
-function savePrice(productId, newPrice, statusDiv, btnElement) {
-    console.log(`Saving price ${newPrice} for product ${productId}`);
-    btnElement.disabled = true;
-    btnElement.textContent = '...';
-
-    // Get the base inline edit data WP needs to perform a save
-    const inlineData = collectInlineEditData(productId);
-    if (!inlineData) {
-        showStatus(statusDiv, 'Error: No se encontraron los datos del producto', true);
-        btnElement.disabled = false;
-        btnElement.textContent = '✓ Guardar';
+    const row = document.getElementById(`post-${productId}`);
+    if (!row) {
+        showStatus(statusDiv, 'Error: Fila no encontrada', true);
+        if (btnElement) { btnElement.disabled = false; btnElement.textContent = '✓ Guardar'; }
         return;
     }
 
-    const formData = new URLSearchParams();
-
-    // Core parameters for inline-save
-    formData.append('action', 'inline-save');
-    formData.append('post_type', 'product');
-    formData.append('post_ID', productId);
-
-    // Add all existing hidden fields from the inline edit wrapper to avoid blanking them out
-    for (const [key, value] of Object.entries(inlineData)) {
-        // Skip some fields that we specifically want to override
-        if (key !== 'post_ID' && key !== '_regular_price') {
-            formData.append(key, value);
-        }
+    // 1. Find and click the native "Edición rápida" button
+    const quickEditBtn = row.querySelector('.editinline');
+    if (!quickEditBtn) {
+        showStatus(statusDiv, 'Error: Botón de edición rápida nativo no encontrado', true);
+        if (btnElement) { btnElement.disabled = false; btnElement.textContent = '✓ Guardar'; }
+        return;
     }
 
-    // Set the specific nonce and properties for quick editing
-    const inlineEditNonce = document.getElementById('_inline_edit');
-    if (inlineEditNonce) formData.append('_inline_edit', inlineEditNonce.value);
+    quickEditBtn.click(); // This opens the edit form below the row
 
-    const woocommerceNonce = document.getElementById('woocommerce_quick_edit_nonce');
-    if (woocommerceNonce) formData.append('woocommerce_quick_edit_nonce', woocommerceNonce.value);
-    formData.append('woocommerce_quick_edit', '1');
-
-    // Finally, override the regular price
-    formData.append('_regular_price', newPrice);
-
-    // Some basic fallbacks for typical inline save payload
-    if(!formData.has('post_status')) formData.append('post_status', 'publish'); // Assume publish if missing
-
-    fetch(ajaxurl, { // ajaxurl is a global variable defined by WordPress in the admin area
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
-        },
-        body: formData.toString()
-    })
-    .then(response => {
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+    // Wait a brief moment for WordPress JS to populate the form
+    setTimeout(() => {
+        const editRow = document.getElementById(`edit-${productId}`);
+        if (!editRow) {
+            showStatus(statusDiv, 'Error al abrir formulario', true);
+            if (btnElement) { btnElement.disabled = false; btnElement.textContent = '✓ Guardar'; }
+            return;
         }
-        return response.text();
-    })
-    .then(data => {
-        // WordPress returns the updated row HTML upon success
-        if (data && data.indexOf('<tr') !== -1) {
-             showStatus(statusDiv, 'Precio guardado!', false);
-             // We could replace the row, but let's just keep our UI intact.
-             // The next time the page reloads or an action is done, it will reflect.
-             // However, to make it visual, we'll flash the input field.
-             // Try to find the input within the row.
-             const containerRow = statusDiv.closest('.wc-qe-container');
-             if (containerRow) {
-                 const input = containerRow.querySelector('.wc-qe-price-input');
-                 if(input) {
-                     input.style.backgroundColor = '#d4edda';
-                     setTimeout(() => { input.style.backgroundColor = ''; }, 1000);
-                 }
 
-                 // Also try to update the main price display in WooCommerce list table
-                 const tr = containerRow.closest('tr');
-                 if (tr) {
-                    const inlinePrice = tr.querySelector('.inline-edit-wrapper input[name="_regular_price"]');
-                    if (inlinePrice) inlinePrice.value = newPrice;
-                    const displayPrice = tr.querySelector('td.column-price .woocommerce-Price-amount bdi');
-                    if (displayPrice) {
-                        // Very basic text replacement, won't handle complex formatting but better than nothing
-                        displayPrice.innerHTML = displayPrice.innerHTML.replace(/[\d.,]+/, newPrice);
+        // 2. Inject our value into the form
+        if (fieldName === '_regular_price') {
+            const priceInput = editRow.querySelector(`input[name="${fieldName}"]`);
+            if (priceInput) priceInput.value = value;
+        } else if (fieldName === '_thumbnail_id') {
+            // For images, we need to add a hidden input since Quick Edit doesn't normally handle thumbnails
+            let thumbInput = editRow.querySelector(`input[name="_thumbnail_id"]`);
+            if (!thumbInput) {
+                thumbInput = document.createElement('input');
+                thumbInput.type = 'hidden';
+                thumbInput.name = '_thumbnail_id';
+                editRow.querySelector('.inline-edit-wrapper').appendChild(thumbInput);
+            }
+            thumbInput.value = value;
+        }
+
+        // 3. Click the native "Actualizar" save button
+        const saveBtn = editRow.querySelector('.save');
+        if (saveBtn) {
+            saveBtn.click();
+
+            // Wait for it to close (meaning success) or show error
+            let checkInterval = setInterval(() => {
+                const stillOpen = document.getElementById(`edit-${productId}`);
+                if (!stillOpen) {
+                    // Success!
+                    clearInterval(checkInterval);
+                    showStatus(statusDiv, '¡Guardado!', false);
+                    if (btnElement) {
+                        btnElement.disabled = false;
+                        btnElement.textContent = '✓ Guardar';
+
+                        const input = statusDiv.parentElement.querySelector('.wc-qe-price-input');
+                        if(input) {
+                            input.style.backgroundColor = '#d4edda';
+                            setTimeout(() => { input.style.backgroundColor = ''; }, 1000);
+                        }
                     }
-                 }
-             }
+
+                    // If it was an image, update the UI manually since WP might not redraw the thumb column
+                    if (isImage && attachmentUrl) {
+                        const newRow = document.getElementById(`post-${productId}`);
+                        if (newRow) {
+                             const thumbColumn = newRow.querySelector('td.column-thumb');
+                             if (thumbColumn) {
+                                  const img = thumbColumn.querySelector('img');
+                                  if (img) {
+                                       img.src = attachmentUrl;
+                                       img.removeAttribute('srcset');
+                                  } else {
+                                       const a = document.createElement('a');
+                                       const newImg = document.createElement('img');
+                                       newImg.src = attachmentUrl;
+                                       newImg.className = 'attachment-woocommerce_thumbnail size-woocommerce_thumbnail';
+                                       a.appendChild(newImg);
+                                       thumbColumn.insertBefore(a, thumbColumn.firstChild);
+                                  }
+                             }
+                        }
+                    }
+
+                } else {
+                    const errorMsg = stillOpen.querySelector('.error');
+                    if (errorMsg && errorMsg.style.display !== 'none') {
+                        clearInterval(checkInterval);
+                        showStatus(statusDiv, 'Error al guardar.', true);
+                        if (btnElement) { btnElement.disabled = false; btnElement.textContent = '✓ Guardar'; }
+                    }
+                }
+            }, 500);
+
+            // Timeout after 10 seconds
+            setTimeout(() => { clearInterval(checkInterval); }, 10000);
+
         } else {
-             console.error("Error from AJAX:", data);
-             showStatus(statusDiv, 'Error al guardar.', true);
+            showStatus(statusDiv, 'Botón de guardar nativo no encontrado', true);
+            if (btnElement) { btnElement.disabled = false; btnElement.textContent = '✓ Guardar'; }
         }
-    })
-    .catch(error => {
-        console.error('Error saving price:', error);
-        showStatus(statusDiv, 'Error de red.', true);
-    })
-    .finally(() => {
-        btnElement.disabled = false;
-        btnElement.textContent = '✓ Guardar';
-    });
+
+    }, 300); // 300ms is usually enough for WP inlineEdit.edit() to finish populating
+}
+
+// Function to trigger save price
+function savePrice(productId, newPrice, statusDiv, btnElement) {
+    console.log(`Saving price ${newPrice} for product ${productId}`);
+    saveViaQuickEdit(productId, '_regular_price', newPrice, statusDiv, btnElement, false);
 }
 
 function searchImages(productTitle, gridContainer, loadingDiv, statusDiv, productId) {
@@ -444,94 +443,8 @@ async function setImageForProduct(productId, imageUrl, statusDiv, gridContainer)
 
         showStatus(statusDiv, 'Asignando imagen...', false);
 
-        // 4. Attach image as Product Thumbnail using inline-save
-        // We avoid the `set-post-thumbnail` action because we don't have its specific nonce
-        // Instead, we use the same `inline-save` action we used for the price, which supports setting _thumbnail_id
-
-        const inlineData = collectInlineEditData(productId);
-        if (!inlineData) {
-            throw new Error("No se pudo obtener datos para guardar la imagen (inline data missing).");
-        }
-
-        const attachFormData = new URLSearchParams();
-        attachFormData.append('action', 'inline-save');
-        attachFormData.append('post_type', 'product');
-        attachFormData.append('post_ID', productId);
-
-        // Pass existing data
-        for (const [key, value] of Object.entries(inlineData)) {
-            if (key !== 'post_ID') attachFormData.append(key, value);
-        }
-
-        // Apply nonces
-        const inlineEditNonce = document.getElementById('_inline_edit');
-        if (inlineEditNonce) attachFormData.append('_inline_edit', inlineEditNonce.value);
-
-        const woocommerceNonce = document.getElementById('woocommerce_quick_edit_nonce');
-        if (woocommerceNonce) attachFormData.append('woocommerce_quick_edit_nonce', woocommerceNonce.value);
-        attachFormData.append('woocommerce_quick_edit', '1');
-
-        // Set the thumbnail ID! This overrides the image just like the price
-        attachFormData.append('_thumbnail_id', attachmentId);
-        if(!attachFormData.has('post_status')) attachFormData.append('post_status', 'publish');
-
-        const attachRes = await fetch(`${window.location.origin}/wp-admin/admin-ajax.php`, {
-             method: 'POST',
-             headers: {
-                 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
-             },
-             body: attachFormData.toString()
-        });
-
-        const attachText = await attachRes.text();
-
-        if (!attachRes.ok || (attachText && attachText.trim() === '0')) {
-             throw new Error("Error al asignar la imagen destacada. El servidor rechazó la petición.");
-        }
-
-        // Also update the hidden inline data locally so subsequent saves don't revert the image
-        const inlineThumbnailField = document.querySelector(`#inline_${productId} input[name="_thumbnail_id"]`);
-        if (inlineThumbnailField) {
-            inlineThumbnailField.value = attachmentId;
-        } else {
-            // Create one if it didn't exist
-            const inlineEditRow = document.getElementById(`inline_${productId}`);
-            if (inlineEditRow) {
-                const hiddenInput = document.createElement('input');
-                hiddenInput.type = 'hidden';
-                hiddenInput.name = '_thumbnail_id';
-                hiddenInput.value = attachmentId;
-                inlineEditRow.appendChild(hiddenInput);
-            }
-        }
-
-        showStatus(statusDiv, '¡Imagen actualizada!', false);
-
-        // 5. Visually update the image in the current list table
-        const row = document.getElementById(`post-${productId}`);
-        if (row) {
-             const thumbColumn = row.querySelector('td.column-thumb');
-             if (thumbColumn) {
-                  const img = thumbColumn.querySelector('img');
-                  if (img && attachmentUrl) {
-                       img.src = attachmentUrl;
-                       // Remove srcset to force using the new src
-                       img.removeAttribute('srcset');
-                  } else if (attachmentUrl) {
-                       // If there wasn't an image before, create it
-                       const a = document.createElement('a');
-                       a.href = `${window.location.origin}/wp-admin/post.php?post=${productId}&action=edit`;
-                       const newImg = document.createElement('img');
-                       newImg.src = attachmentUrl;
-                       newImg.width = 40; // Default thumb size
-                       newImg.height = 40;
-                       newImg.className = 'attachment-woocommerce_thumbnail size-woocommerce_thumbnail';
-                       a.appendChild(newImg);
-                       // Prepend it before our container
-                       thumbColumn.insertBefore(a, thumbColumn.firstChild);
-                  }
-             }
-        }
+        // 4. Attach image as Product Thumbnail using Quick Edit
+        saveViaQuickEdit(productId, '_thumbnail_id', attachmentId, statusDiv, null, true, attachmentUrl);
 
     } catch (error) {
          console.error("Error complete image process:", error);

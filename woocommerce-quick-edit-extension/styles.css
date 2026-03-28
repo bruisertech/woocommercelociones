@@ -1,4 +1,10 @@
 /* Styles for the injected UI elements */
+/* Hide the native quick edit form row from view to keep the UI clean,
+since we are automating it in the background */
+tr.inline-edit-row {
+    display: none !important;
+}
+
 .wc-qe-container {
     margin-top: 5px;
     padding: 5px;
